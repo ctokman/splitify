@@ -275,6 +275,19 @@ input:focus {
   color: var(--text-muted);
   font-style: italic;
 }
+.empty-state p {
+  margin: 0 0 8px;
+}
+.empty-hint {
+  margin-top: 12px !important;
+  font-size: 13px;
+  font-style: normal;
+  opacity: 0.9;
+}
+.header-actions {
+  display: flex;
+  gap: 8px;
+}
 
 /* Group page */
 .group-page {

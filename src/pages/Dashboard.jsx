@@ -14,40 +14,63 @@ export function Dashboard() {
 
   useEffect(() => {
     if (!user) return
+    setLoading(true)
+    setError('')
     loadGroups()
     loadInvites()
   }, [user])
 
   async function loadGroups() {
-    const { data: memberships } = await supabase
-      .from('group_members')
-      .select('group_id')
-      .eq('user_id', user.id)
+    try {
+      const { data: memberships, error: membershipsError } = await supabase
+        .from('group_members')
+        .select('group_id')
+        .eq('user_id', user.id)
 
-    if (!memberships?.length) {
+      if (membershipsError) {
+        setError(membershipsError.message || 'Failed to load groups')
+        setGroups([])
+        return
+      }
+
+      if (!memberships?.length) {
+        setGroups([])
+        return
+      }
+
+      const groupIds = memberships.map((m) => m.group_id)
+      const { data: groupData, error: groupsError } = await supabase
+        .from('groups')
+        .select('*')
+        .in('id', groupIds)
+        .order('created_at', { ascending: false })
+
+      if (groupsError) {
+        setError(groupsError.message || 'Failed to load groups')
+        setGroups([])
+        return
+      }
+
+      setGroups(groupData || [])
+    } catch (err) {
+      setError(err.message || 'Failed to load groups')
       setGroups([])
+    } finally {
       setLoading(false)
-      return
     }
-
-    const groupIds = memberships.map((m) => m.group_id)
-    const { data: groupData } = await supabase
-      .from('groups')
-      .select('*')
-      .in('id', groupIds)
-      .order('created_at', { ascending: false })
-
-    setGroups(groupData || [])
-    setLoading(false)
   }
 
   async function loadInvites() {
-    const { data } = await supabase
-      .from('invites')
-      .select('*, groups(name)')
-      .eq('email', user.email)
-      .eq('status', 'pending')
-    setInvites(data || [])
+    try {
+      const { data, error: invitesError } = await supabase
+        .from('invites')
+        .select('*, groups(name)')
+        .eq('email', user.email)
+        .eq('status', 'pending')
+      if (!invitesError) setInvites(data || [])
+    } catch {
+      // Invites are non-critical, ignore
+    }
   }
 
   async function acceptInvite(inviteId, groupId) {
@@ -68,17 +91,24 @@ export function Dashboard() {
 
   async function createGroup(e) {
     e.preventDefault()
-    if (!newGroupName.trim()) return
+    if (!newGroupName.trim()) {
+      setError('Enter a group name')
+      return
+    }
     setError('')
     setCreating(true)
+    const groupName = newGroupName.trim()
+    setNewGroupName('')
     try {
-      const { error: err } = await supabase
+      const { data: newGroup, error: err } = await supabase
         .from('groups')
-        .insert({ name: newGroupName.trim(), created_by: user.id })
+        .insert({ name: groupName, created_by: user.id })
+        .select('id, name, created_at')
+        .single()
       if (err) throw err
-      setNewGroupName('')
-      loadGroups()
+      setGroups((prev) => [newGroup, ...prev])
     } catch (err) {
+      setNewGroupName(groupName)
       setError(err.message || 'Failed to create group')
     } finally {
       setCreating(false)
@@ -92,9 +122,14 @@ export function Dashboard() {
           <h1>Splittify</h1>
           <p className="user-email">{user?.email}</p>
         </div>
-        <button onClick={signOut} className="btn btn-ghost">
-          Log out
-        </button>
+        <div className="header-actions">
+          <button onClick={() => { setLoading(true); setError(''); loadGroups(); loadInvites(); }} className="btn btn-ghost">
+            Refresh
+          </button>
+          <button onClick={signOut} className="btn btn-ghost">
+            Log out
+          </button>
+        </div>
       </header>
 
       <main className="dashboard-main">
@@ -120,19 +155,22 @@ export function Dashboard() {
         )}
         <section className="create-group">
           <h2>Create a group</h2>
+          {error && <div className="error-message">{error}</div>}
           <form onSubmit={createGroup}>
             <input
               type="text"
               placeholder="Group name (e.g. Paris Trip 2025)"
               value={newGroupName}
-              onChange={(e) => setNewGroupName(e.target.value)}
+              onChange={(e) => { setNewGroupName(e.target.value); setError(''); }}
               disabled={creating}
+              autoComplete="off"
+              required
+              minLength={1}
             />
             <button type="submit" className="btn btn-primary" disabled={creating}>
               {creating ? 'Creating...' : 'Create'}
             </button>
           </form>
-          {error && <div className="error-message">{error}</div>}
         </section>
 
         <section className="groups-section">
@@ -140,7 +178,12 @@ export function Dashboard() {
           {loading ? (
             <p>Loading...</p>
           ) : groups.length === 0 ? (
-            <p className="empty-state">No groups yet. Create one above to get started.</p>
+            <div className="empty-state">
+              <p>No groups yet. Create one above to get started.</p>
+              <p className="empty-hint">
+                Using seed data? Log in as <strong>alice@test.splittify.dev</strong> (password: testpass123) to see Paris Trip and NYC Weekend.
+              </p>
+            </div>
           ) : (
             <ul className="group-list">
               {groups.map((group) => (

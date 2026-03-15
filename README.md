@@ -44,6 +44,23 @@ npm run dev
 
 Open http://localhost:5173
 
+### 4. Seed test data (optional)
+
+Creates 4 test users and sample groups/expenses:
+
+```bash
+# Add SUPABASE_SERVICE_ROLE_KEY to .env (from Supabase → Project Settings → API)
+npm run seed
+```
+
+Test accounts (password: `testpass123`):
+- alice@test.splittify.dev
+- bob@test.splittify.dev
+- carol@test.splittify.dev
+- dave@test.splittify.dev
+
+Alice & Bob see both "Paris Trip 2025" and "NYC Weekend". Carol & Dave see only "Paris Trip 2025".
+
 ## Tech stack
 
 - React + Vite
